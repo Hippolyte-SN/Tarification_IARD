@@ -1,0 +1,296 @@
+---
+title: "Analyse bivariée & Modélisation économétrique"
+author: "SANON Korossin"
+date: "17/02/2026"
+output: 
+  html_notebook: 
+    number_sections: yes
+  pdf_document: 
+    number_sections: yes
+  html_document: 
+    number_sections: yes
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library("lubridate")
+library("magrittr")
+```
+
+
+## Analyse descriptive bivariée
+> "if (!exists())" : Import des 2 bases de données : « base_ass » et « base_sin » 
+
+```{r}
+Base_ass <- read.csv2("Base_ass.csv")
+Base_sin <- read.csv2("Base_sin.csv")
+
+#Transformation des variables qualitatives en facteur
+Base_ass$Sexe <- as.factor(Base_ass$Sexe)
+Base_ass$Type.vehicule <- as.factor(Base_ass$Type.vehicule) 
+Base_ass$Zone.geo <- as.factor(Base_ass$Zone.geo)
+
+#Construction des bases d’études
+data_cm <- merge(Base_sin, Base_ass, by.x = "num.pol", by.y = "num.pol", all.x = T)
+
+t_freq <- data.frame(table(data_cm$num.pol))
+names(t_freq) <- c("num.pol","nbsin")
+data_freq <- merge(Base_ass, t_freq, by.x = "num.pol", by.y = "num.pol", all.x = T)
+data_freq[is.na(data_freq$nbsin), "nbsin"] = 0
+data_freq$nbsin_fact <- as.factor(data_freq$nbsin)
+
+data_freq$exposition <- as.numeric(dmy("31/12/2019")-dmy(data_freq$Date.sous)+1)/365
+```
+
+
+### Fonction d'analyse bivariée
+
+```{r}
+source("E:/Git/Tarification_IARD/fct_biv_stat.R")
+```
+
+
+> Indicateurs statistiques par rapport à la fréquence de sinistre
+
+```{r}
+biv_stat(data_freq$age, data_freq$nbsin_fact, "Âge", "Nombre de sinistres")
+```
+
+```{r}
+biv_stat(data_freq$Sexe, data_freq$nbsin_fact, "Sexe", "Nombre de sinistres")
+```
+
+```{r}
+biv_stat(data_freq$Type.vehicule, data_freq$nbsin_fact, "Type de véhicule", "Nombre de sinistres")
+```
+
+```{r}
+biv_stat(data_freq$anc.permis, data_freq$nbsin_fact, "Ancienneté permis", "Nombre de sinistres")
+```
+
+```{r}
+biv_stat(data_freq$Zone.geo, data_freq$nbsin_fact, "Zone géographique", "Nombre de sinistres")
+```
+
+```{r}
+biv_stat(data_freq$valeur, data_freq$nbsin_fact, "Valeur du véhicule", "Nombre de sinistres")
+```
+
+
+
+> Indicateurs statistiques par rapport au coût des sinistres 
+
+```{r}
+biv_stat(data_cm$age, data_cm$charge.sin, "Âge", "Charge sinistre")
+```
+
+```{r}
+biv_stat(data_cm$Sexe, data_cm$charge.sin, "Sexe", "Charge sinistre")
+```
+
+```{r}
+biv_stat(data_cm$Type.vehicule, data_cm$charge.sin, "Type de véhicule", "Charge sinistre")
+```
+
+```{r}
+biv_stat(data_cm$anc.permis, data_cm$charge.sin, "Ancienneté permis", "Charge sinistre")
+```
+
+```{r}
+biv_stat(data_cm$Zone.geo, data_cm$charge.sin, "Zone géographique", "Charge sinistre")
+```
+
+```{r}
+biv_stat(data_cm$valeur, data_cm$charge.sin, "Valeur du véhicule", "Charge sinistre")
+```
+
+
+
+
+## Régression
+
+### modélisation du coût moyen 
+> Construction d'une base d’apprentissage et un échantillon test (50 obs.) 
+
+```{r}
+#set.seed(123)
+###
+`%notin%` <- Negate(`%in%`)
+###
+data_cm$ech <- row.names(data_cm)
+ech <- sample(data_cm$ech, size = 50)
+data_cm_test <- data_cm[data_cm$ech %in% ech, ]
+data_cm_app <- data_cm[data_cm$ech %notin% ech, ]
+```
+
+> Modélisation du cout avec les variables ayant un fort pouvoir explicatif sur la base d’apprentissage
+
+```{r}
+formul_cout <- charge.sin ~ Type.vehicule + Zone.geo + valeur
+
+modele_cout <- glm(
+  formul_cout,
+  family = gaussian(link = "log"),
+  data = data_cm_app
+)
+summary(modele_cout)
+
+(coeff_cout <- tidy(modele_cout, exponentiate = TRUE))
+paste0("AIC = ",  AIC(modele_cout))
+```
+
+```{r}
+plot(density(data_cm_app$charge.sin),
+     col = "blue",
+     lwd = 2,
+     main = "Densité Observé vs Prédit",
+     xlab = "Charge sinistre")
+
+lines(density(modele_cout$fitted.values),
+      col = "red",
+      lwd = 2)
+
+legend("topright",
+       legend = c("Observé", "Prédit"),
+       col = c("blue", "red"),
+       lwd = 2)
+```
+
+
+
+### Modélisation de la fréquence
+
+> Construire aléatoirement une base d’apprentissage (900 obs e.g.) et un échantillon test
+
+```{r}
+#set.seed(123)
+###
+data_freq$ech <- row.names(data_freq)
+ech <- sample(data_freq$ech, size = 900)
+data_freq_app <- data_freq[data_freq$ech %in% ech, ]
+data_freq_test <- data_freq[data_freq$ech %notin% ech, ]
+```
+
+> Modélisation de la fréquence sur la base d’apprentissage
+
+```{r}
+formul_freq <- nbsin ~ Sexe + anc.permis
+
+modele_freq <- glm(
+  formul_freq,
+  family = poisson(link = "log"),
+  offset = log(exposition),
+  data = data_freq_app
+)
+
+summary(modele_freq)
+
+(coeff_freq <- tidy(modele_freq, exponentiate = TRUE))
+paste0("AIC = ", AIC(modele_freq))
+```
+
+ **Comme les prédictions sont des espérances, on peut les transformer en fréquences attendues : **
+
+```{r}
+y_obs <- data_freq_app$nbsin
+y_pred <- modele_freq$fitted.values
+
+max_y <- max(y_obs)
+freq_obs <- table(factor(y_obs, levels = 0:max_y))
+
+# Fréquences attendues
+lambda_i <- y_pred
+freq_pred <- sapply(0:max_y, function(k) sum(dpois(k, lambda_i)))
+```
+
+```{r}
+barplot(rbind(freq_obs, freq_pred),
+        beside = TRUE,
+        col = c("steelblue", "orange"),
+        names.arg = 0:max_y,
+        main = "Histogramme Observé vs Prédit",
+        xlab = "Nombre de sinistres",
+        ylab = "Fréquence",
+        legend = c("Observé", "Prédit"))
+```
+
+
+
+
+
+### Validation des modèles sur les échantillons tests de coût et de fréquence
+> Fonction de validation pour les modèles
+
+```{r}
+source("E:/Git/Tarification_IARD/fct_validation.R")
+```
+
+#### Validation du modèle de coût 
+
+> Voir les résultats
+
+```{r}
+res_cout <- validation_cout(
+  model = modele_cout,
+  data_test = data_cm_test,
+  y_name = "charge.sin"
+)
+```
+
+```{r}
+res_cout
+```
+
+> Lancer les graphiques
+
+```{r}
+diagnostic_cout(
+  model = modele_cout,
+  data_test = data_cm_test,
+  y_name = "charge.sin"
+)
+
+```
+
+
+
+#### Validation du modèle de fréquence
+
+> Voir les résultats
+ 
+```{r}
+res_freq <- validation_frequence(
+  model = modele_freq,
+  data_test = data_freq_test,
+  y_name = "nbsin"
+)
+```
+
+```{r}
+res_freq
+```
+
+> Lancer les graphiques
+
+```{r}
+diagnostic_frequence(
+  model = modele_freq,
+  data_test = data_freq_test,
+  y_name = "nbsin"
+)
+```
+
+
+
+
+
+
+
+
+
+

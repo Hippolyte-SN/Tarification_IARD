@@ -1,0 +1,169 @@
+---
+title: 'Analyse des bases sous R'
+author: "SANON Korossin"
+date: "13/02/2026"
+output:
+  html_notebook: 
+    number_sections: yes
+  pdf_document: 
+    number_sections: yes
+  html_document: 
+    number_sections: yes
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(forcats)
+library(gt)
+library(scales)
+library(psych)
+library(rstatix)
+```
+
+
+## Import des bases de données : « base_ass » et « base_sin »
+
+```{r}
+rm(list=ls())
+
+Base_ass <- read.csv2("Base_ass.csv")
+Base_sin <- read.csv2("Base_sin.csv")
+```
+
+> Caractéristiques des bases : format de la table, nom des variables, format des variables, dimensions
+
+```{r}
+#format
+str(Base_ass); str(Base_sin)
+```
+
+```{r}
+#Transformation des variables qualitatives en facteur
+Base_ass$Sexe <- as.factor(Base_ass$Sexe)
+Base_ass$Type.vehicule <- as.factor(Base_ass$Type.vehicule) 
+Base_ass$Zone.geo <- as.factor(Base_ass$Zone.geo)
+```
+
+## Analyse univariée : indicateurs statistiques :
+
+### Fonction d'analyse univariée pour variables qualitatives
+
+```{r}
+source("E:/Git/Tarification_IARD/fct_quali.R")
+```
+
+> Variables qualitatives : tableau de fréquence, diagramme bâton, camembert
+
+```{r}
+#Tableau de fréquence + diagramme bâton (par defaut)
+fct_quali(Base_ass$Sexe, "Sexe")
+```
+
+```{r}
+#Tableau de fréquence + camembert
+fct_quali(Base_ass$Sexe, "Sexe", pie = TRUE)
+```
+
+```{r}
+#Tableau de fréquence + diagramme bâton
+fct_quali(Base_ass$Type.vehicule, "Type véhicule")
+```
+
+```{r}
+#Tableau de fréquence + diagramme bâton
+fct_quali(Base_ass$Zone.geo, "Zone géographique")
+```
+
+### Fonction d'analyse univariée pour variables quantitatives
+
+```{r}
+source("E:/Git/Tarification_IARD/fct_quanti.R")
+```
+
+> Variables quantitatives : moyenne, écart-type, min/max, médiane, quartiles, histogrammes et boite à moustache
+
+```{r}
+#Histogramme + densité (par défaut)
+fct_quanti(Base_ass$age, "Âge")
+```
+
+```{r}
+#Boxplot 
+fct_quanti(Base_ass$age, "Âge", type = "boxplot")
+```
+
+```{r}
+#Densité seule
+fct_quanti(Base_ass$valeur, "Valeur", type = "density")
+```
+
+```{r}
+#Histogramme avec plus de classes
+fct_quanti(Base_ass$anc.permis, "Âge du permis", bins = 40)
+```
+
+
+> Contrôle des données : valeur manquante, valeur aberrante/ incorrecte
+
+```{r}
+################################permet de donner le nombre de valeurs manquantes
+for (i in 2:8) {
+v_manq = sum(is.na(Base_ass[,i]))
+print(v_manq)
+}
+```
+
+
+## Construction des bases d’études :
+
+### Base d’étude du coût
+
+> Fusion de la base des assurés avec la base de sinistres de manière à garder uniquement les lignes de sinistres.
+
+```{r}
+data_cm <- merge(Base_sin, Base_ass, by.x = "num.pol", by.y = "num.pol", all.x = T)
+str(data_cm)
+```
+
+
+### Base d’étude de la fréquence
+
+> Construction du tableau de fréquence (absolue) de la base de sinistres i.e. le nombre de sinistres par police
+
+```{r}
+t_freq <- data.frame(table(data_cm$num.pol))
+str(t_freq)
+```
+
+
+> Fusion du tableau de fréquence avec la base des assurés en gardant toutes les lignes assurés.
+
+```{r}
+names(t_freq) <- c("num.pol","nbsin")
+data_freq <- merge(Base_ass, t_freq, by.x = "num.pol", by.y = "num.pol", all.x = T)
+str(data_freq)
+```
+
+> Affectation de la valeur 0 à la variable « nbsin » des lignes sans sinistres
+
+```{r}
+nb_na <- paste0("Nombre de lignes sans sinistres = " ,sum(is.na(data_freq$nbsin)))
+nb_na
+
+#On affecte la valeur 0
+data_freq[is.na(data_freq$nbsin), "nbsin"] = 0
+```
+
+
+
+
+
+
+

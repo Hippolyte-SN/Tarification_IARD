@@ -1,0 +1,276 @@
+---
+title: "Modélisation de variables aléatoires"
+author: "SANON Korossin"
+date: "15/02/2026"
+output:
+  html_notebook: 
+    number_sections: yes
+  pdf_document: 
+    number_sections: yes
+  html_document: 
+    number_sections: yes
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(MASS)
+library(vcd)
+```
+
+
+## Calculs empiriques
+
+> "if (!exists())" : Import des bases de données : « base_ass » et « base_sin » 
+
+```{r}
+Base_ass <- read.csv2("Base_ass.csv")
+Base_sin <- read.csv2("Base_sin.csv")
+
+#Transformation des variables qualitatives en facteur
+Base_ass$Sexe <- as.factor(Base_ass$Sexe)
+Base_ass$Type.vehicule <- as.factor(Base_ass$Type.vehicule) 
+Base_ass$Zone.geo <- as.factor(Base_ass$Zone.geo)
+
+#Construction des bases d’études
+data_cm <- merge(Base_sin, Base_ass, by.x = "num.pol", by.y = "num.pol", all.x = T)
+
+t_freq <- data.frame(table(data_cm$num.pol))
+names(t_freq) <- c("num.pol","nbsin")
+data_freq <- merge(Base_ass, t_freq, by.x = "num.pol", by.y = "num.pol", all.x = T)
+data_freq[is.na(data_freq$nbsin), "nbsin"] = 0
+```
+
+> La fréquence globale empirique
+
+```{r}
+(fq_g <- mean(data_freq$nbsin))
+```
+
+> Le coût moyen global empirique
+
+```{r}
+(cm_g <- mean(data_cm$charge.sin))
+```
+
+> Prime pure globale empirique : Prime pure = "moyenne" de fréquence * "moyenne" de charge sinistre
+
+```{r}
+(pp <- fq_g*cm_g)
+```
+
+> Prime pure globale empirique de manière plus directe
+
+```{r}
+sum(data_cm$charge.sin)/1000
+```
+
+## Modélisation de variables aléatoires
+
+### Modélisation du nombre de sinistres
+
+> Les lois les plus adaptées
+
+**Les lois de comptages (de dénombrement) sont candidates exemple : loi de poisson, loi binomiale, loi binomiale négative etc... Dans ce cas précis, la moyenne du nombre de sinistre et la variance sont proches, la loi de poisson serait la mieux adapté**
+
+```{r}
+barplot(table(data_freq$nbsin), main = "Répartition du nombre de sinistres", 
+        xlab = "Nombre de sinistres", ylab = "Fréquence", col = "brown")
+
+paste0("Moyenne du nombre de sinistres = " ,mean(data_freq$nbsin))
+paste0("Variance du nombre de sinistres = " ,var(data_freq$nbsin)*(1000-1)/1000)
+```
+
+
+> Paramétrage de la loi selon la méthode de maximum de vraissemblance MMV.
+
+```{r}
+MMV_freq <- fitdistr(data_freq$nbsin, "poisson")
+lamda <- as.vector(MMV_freq$estimate)
+```
+
+> Tests d’adéquation pour valider l’approche et le calibrage de la loi :
+> probabilités empirique et théorique
+
+```{r}
+prb_pois <- ecdf(sort(data_freq$nbsin))
+plot(prb_pois, ylab="Fréquences", xlab="nombre de sinitre", main="Fonction de répartition")
+curve(ppois(x, lamda), add = T, col = "red")
+```
+
+> Comparaison : effectifs observés et effectifs théoriques
+
+```{r}
+(tbl1 <- table(data_freq$nbsin))
+(tbl2 <- table(rpois(1000,lamda)))
+```
+
+> Test de 𝜒2 
+
+**Hypothèses du test**
+**H0 : la distribution observée suit les probabilités théoriques données**
+**H1 : elle ne les suit pas**
+
+```{r}
+chisq.test(data_freq$nbsin)
+```
+
+**On ne rejette pas l’hypothèse nulle. Il n’y a pas de différence statistiquement significative entre les fréquences observées et les fréquences théoriques.**
+
+
+```{r}
+(tst_khi2 <- goodfit(data_freq$nbsin))
+plot(tst_khi2)
+```
+
+
+
+### Modélisation du coût des sinistres
+
+> Les lois les plus adaptées
+
+**Les lois continues sont candidates exemple : loi de Gamma, loi normale, loi log normale etc... Dans ce cas précis, loi log normale serait la mieux adapté**
+
+```{r}
+hist(log(data_cm$charge.sin), freq = F, main = "Histogramme du log de charges sinistre",
+     xlab = "log charges sinistre", ylab = "densité", col = "blue")
+```
+
+
+> Paramétrage de la loi selon la méthode de maximum de vraissemblance MMV.
+
+```{r}
+MMV_charge_sin <- fitdistr(data_cm$charge.sin, "lognormal")
+mu <- as.vector(MMV_charge_sin$estimate[1])
+sdl <- as.vector(MMV_charge_sin$estimate[2])
+
+log_charge_sin <- log(data_cm$charge.sin)
+```
+
+> Tests d’adéquation pour valider l’approche et le calibrage de la loi :
+> La densité empirique et la densité théorique
+
+```{r}
+plot(density(log_charge_sin), ylab = "densité", xlab="charges", main="Fonction de densité", col = "red")
+curve(dnorm(x, mean = mu, sd = sdl), add = T, col = "darkblue")
+```
+
+> Construire la boite à moustache :
+
+```{r}
+boxplot(log_charge_sin, horizontal =T, col = "blue")
+```
+
+> Fonction de répartition empirique ; superposée avec la f.d.r théorique
+
+```{r}
+f <- ecdf(sort(log_charge_sin))
+plot(f, ylab="Fréquences", xlab="charge", main="Fonction de répartition")
+curve(pnorm(x, mean = mu, sd = sdl), add = T, col = "red")
+```
+
+>  Q-Q plot et droite de Henry
+
+```{r}
+qqnorm(log_charge_sin)
+qqline(log_charge_sin, col = "red")
+```
+
+> Test de normalité de la loi : Shapiro-Wilk
+
+**Hypothèses du test**
+**H0 : les données suivent une distribution normale**
+**H1 : les données ne suivent pas une distribution normale**
+
+```{r}
+shapiro.test(log_charge_sin)
+```
+**On ne rejette pas l’hypothèse de normalité.**
+**La transformation logarithmique des charges sinistres suit une loi normale, la charge sinistre suit donc une loi lognormale**
+
+
+
+### Calcul de la prime pure
+> Calcul de la prime pure via la modélisation de la fréquence et du coût moyen :
+
+**Rappel : l’expression de l’espérance pour une loi LN = exp(mu + sig^2/2)**
+
+```{r}
+(pp_MMV <- exp(mu+(sdl^2)/2) * lamda)
+```
+
+> Comparaison avec la prime pure calculée de façon empirique :
+
+```{r}
+paste0("la prime pure via la modélisation MMV = ", pp_MMV/pp, " fois la prime pure calculée de façon empirique")
+```
+
+> Intervalle de confiance de la prime pure : quantile (𝛼=5%) sur la loi du coût moyen
+
+```{r}
+m <- mean(data_cm$charge.sin); s <- sd(data_cm$charge.sin)
+n <- length(data_cm$charge.sin)
+u <- qnorm(1-0.05/2)
+
+(b_inf <- m - u*s/sqrt(n))
+(b_sup <- m + u*s/sqrt(n)) 
+
+(pp_inf <- lamda*b_inf)
+(pp_sup <- lamda*b_sup)
+```
+
+> probabilité que le coût (individuel) de sinistre dépasse son espérance 
+
+```{r}
+1 - pnorm(mu+sdl^2/2, mu, sdl)
+#ou encore
+1 - plnorm(exp(mu+sdl^2/2), mu, sdl)
+```
+
+> Chargement de sécurité comme étant défini en fonction du quantile à 90% de la loi du coût moyen
+
+```{r}
+(delta <- qlnorm(90/100,mu,sdl)*lamda - pp_MMV)
+(cs <- delta / pp_MMV)
+```
+
+### Modélisation de la charge sinistre totale par méthode de Monte Carlo
+> Simulation de 1000 observations de la charge sinistre totale (S)
+
+```{r}
+sim <- rep(0,1000)
+for (i in (1:1000)){
+  for (j in (1:1000)){
+    sim[i] <- sim[i] + sum(rlnorm(rpois(1,lamda),mu,sdl))
+  }
+}
+
+```
+
+> Histogramme et graphique de la f.d.r de la charge sinistre totale (S)
+
+```{r}
+hist(sim,nclass = 50, main = "Histogramme de la simulation des charges sinistre totales",
+     xlab = "charge sinistre totale", ylab = "densité", col = "white")
+
+abline(v = sum(data_cm$charge.sin), col = "red", lwd=3)
+abline(v = mean(sim), col = "blue", lwd=3)
+
+plot(ecdf(sort(sim)), ylab="Fréquences", xlab="SIM", main="Fonction de répartition")
+curve(pnorm(x, mean = mean(sim), sd = sd(sim)), add = T, col = "red")
+```
+
+> quantile correspondant approximativement à la charge du portefeuille
+
+```{r}
+length(sim[sim < sum(data_cm$charge.sin)])/length(sim)
+```
+
+
+
+
+
