@@ -1,19 +1,19 @@
 # Tarification en assurance IARD – Automobile
 
-## 🧭 Description
+## Description
 Ce projet explore dans son ensemble la tarification en assurance automobile.
 Il vise à estimer la prime pure à partir de plusieurs méthodes notamment la méthode du maximum de vraissemblance, la modélisation GLM standards en tarification IARD.
 
 ---
 
-## 🎯 Objectifs
+## Objectifs
 - Analyser un portefeuille automobile
 - Modéliser la fréquence et le cout des sinistres
 - Construire une prime pure individuelle
 
 ---
 
-## 📂 Données
+## Données
 Jeu de données représentant un portefeuille automobile.
 
 ### Variables principales
@@ -30,7 +30,7 @@ Jeu de données représentant un portefeuille automobile.
 
 ---
 
-## ⚙️ Méthodologie
+## Méthodologie
 
 ### Fréquence
 - Moyenne empirique
@@ -51,12 +51,12 @@ Jeu de données représentant un portefeuille automobile.
 
 ---
 
-## 📈 Résultats
+## Résultats
 Analyses univariées / bivariées, visualisation de données, modélisation de variables aléatoires, modélisation économétrique et tarification.
 
 ---
 
-## 🛠️ Technologies
+## Technologies
 - R version 4.4.3
 - fonctions R
 - fonctions personnalisées
